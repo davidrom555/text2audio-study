@@ -131,13 +131,7 @@ class TTSService:
             if engine == TTSEngine.EDGE:
                 return cls._edge_tts(text, voice, speed)
             elif engine == TTSEngine.PYTTSX3:
-                try:
-                    return cls._pyttsx3_tts(text, voice, language, speed)
-                except TTSError as e:
-                    # En Render/Linux, pyttsx3 no funciona. Fallback a Edge TTS
-                    if "Error en pyttsx3" in str(e):
-                        return cls._edge_tts(text, voice, speed)
-                    raise
+                return cls._pyttsx3_tts(text, voice, language, speed)
             else:
                 return cls._gtts_tts(text, language, speed)
         except TTSError:
@@ -213,20 +207,33 @@ class TTSService:
     
     @classmethod
     def _pyttsx3_tts(cls, text: str, voice: Optional[str], language: str, speed: float) -> bytes:
-        """Genera audio usando pyttsx3 (SAPI5 en Windows - offline)."""
+        """Genera audio usando pyttsx3 (SAPI5 en Windows, espeak en Linux - offline)."""
         try:
             import pyttsx3
+            import platform
 
             # Crear archivo temporal
             with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
                 temp_path = tmp.name
 
             try:
-                # Inicializar motor con driver específico para Windows
-                try:
-                    engine = pyttsx3.init('sapi5')  # Usar SAPI5 explícitamente en Windows
-                except Exception as e:
-                    # Si falla SAPI5, intentar con el motor por defecto
+                # Seleccionar driver según el sistema operativo
+                system = platform.system()
+
+                if system == "Windows":
+                    # Windows: usar SAPI5
+                    try:
+                        engine = pyttsx3.init('sapi5')
+                    except Exception:
+                        engine = pyttsx3.init()
+                elif system == "Linux":
+                    # Linux: usar espeak (requiere espeak-ng instalado)
+                    try:
+                        engine = pyttsx3.init('espeak')
+                    except Exception:
+                        engine = pyttsx3.init()
+                else:
+                    # macOS u otro: usar motor por defecto
                     engine = pyttsx3.init()
 
                 # Ajustar velocidad (palabras por minuto, default ~200)
@@ -264,7 +271,7 @@ class TTSService:
         except ImportError:
             raise TTSError("pyttsx3 no está instalado. Ejecuta: pip install pyttsx3")
         except Exception as e:
-            raise TTSError(f"Error en pyttsx3: {str(e)}. En Windows, asegúrate de que tienes voces instaladas en Configuración → Hora e idioma → Voz.")
+            raise TTSError(f"Error en pyttsx3: {str(e)}. En Windows, asegúrate de que tienes voces instaladas en Configuración → Hora e idioma → Voz. En Linux, instala espeak-ng: apt-get install espeak-ng")
     
     @classmethod
     def get_available_voices(cls, engine: TTSEngine) -> dict:
