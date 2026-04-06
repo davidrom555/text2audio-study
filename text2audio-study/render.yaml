@@ -1,0 +1,19 @@
+# Text2Audio Study - Configuración para Render.com
+# Este archivo permite deploy automático con un clic
+
+services:
+  - type: web
+    name: text2audio-study
+    env: python
+    plan: free
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+    disk:
+      name: uploads
+      mountPath: /uploads
+      sizeGB: 1
+    autoDeploy: true
+    healthCheckPath: /api/health

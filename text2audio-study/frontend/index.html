@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text2Audio Study - Convierte textos a audio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .glass-effect { backdrop-filter: blur(10px); background: rgba(255, 255, 255, 0.95); }
+        .drop-zone { border: 3px dashed #cbd5e1; transition: all 0.3s ease; }
+        .drop-zone.dragover { border-color: #667eea; background: #f0f4ff; }
+        .spinner { animation: spin 1s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .fade-in { animation: fadeIn 0.5s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .voice-card { transition: all 0.2s; }
+        .voice-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .voice-card.selected { border-color: #667eea; background: #f0f4ff; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <header class="gradient-bg text-white shadow-lg">
+        <div class="container mx-auto px-4 py-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="bg-white/20 p-3 rounded-xl">
+                        <i class="fas fa-headphones text-2xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold">Text2Audio Study</h1>
+                        <p class="text-white/80 text-sm">Convierte tus documentos a audio</p>
+                    </div>
+                </div>
+                <a href="https://github.com" target="_blank" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition">
+                    <i class="fab fa-github mr-2"></i>GitHub
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <!-- Alertas -->
+        <div id="alerts" class="mb-6"></div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Panel Izquierdo: Input -->
+            <div class="space-y-6">
+                <!-- Selector de modo -->
+                <div class="glass-effect rounded-2xl shadow-lg p-6">
+                    <div class="flex space-x-2 mb-6">
+                        <button id="btn-mode-file" class="flex-1 py-3 px-4 rounded-xl font-medium transition bg-indigo-600 text-white">
+                            <i class="fas fa-file-upload mr-2"></i>Subir Archivo
+                        </button>
+                        <button id="btn-mode-text" class="flex-1 py-3 px-4 rounded-xl font-medium transition bg-gray-100 text-gray-600 hover:bg-gray-200">
+                            <i class="fas fa-keyboard mr-2"></i>Pegar Texto
+                        </button>
+                    </div>
+
+                    <!-- Modo Archivo -->
+                    <div id="panel-file" class="space-y-4">
+                        <div id="drop-zone" class="drop-zone rounded-2xl p-10 text-center cursor-pointer">
+                            <i class="fas fa-cloud-upload-alt text-5xl text-gray-400 mb-4"></i>
+                            <p class="text-gray-600 font-medium mb-2">Arrastra tu archivo aquí</p>
+                            <p class="text-gray-400 text-sm mb-4">o haz clic para seleccionar</p>
+                            <p class="text-xs text-gray-400">PDF, DOC, DOCX, TXT (máx. 10MB)</p>
+                            <input type="file" id="file-input" class="hidden" accept=".pdf,.doc,.docx,.txt">
+                        </div>
+                        <div id="file-selected" class="hidden bg-green-50 border border-green-200 rounded-xl p-4 flex items-center justify-between">
+                            <div class="flex items-center">
+                                <i class="fas fa-check-circle text-green-500 mr-3"></i>
+                                <span id="filename-display" class="font-medium text-green-800"></span>
+                            </div>
+                            <button id="btn-remove-file" class="text-green-600 hover:text-green-800">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Modo Texto -->
+                    <div id="panel-text" class="hidden space-y-4">
+                        <textarea id="text-input" 
+                            class="w-full h-64 p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                            placeholder="Pega aquí el texto que quieres convertir a audio..."></textarea>
+                        <div class="flex justify-between text-sm text-gray-500">
+                            <span id="char-count">0 caracteres</span>
+                            <span>Máximo: 50,000 caracteres</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Configuración TTS -->
+                <div class="glass-effect rounded-2xl shadow-lg p-6">
+                    <h3 class="font-semibold text-gray-800 mb-4 flex items-center">
+                        <i class="fas fa-cog mr-2 text-indigo-600"></i>Configuración de Voz
+                    </h3>
+                    
+                    <!-- Motor TTS -->
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Motor de Voz</label>
+                        <div class="grid grid-cols-3 gap-3">
+                            <label class="cursor-pointer">
+                                <input type="radio" name="tts-engine" value="edge" checked class="hidden peer">
+                                <div class="p-3 border-2 rounded-xl text-center transition peer-checked:border-indigo-600 peer-checked:bg-indigo-50">
+                                    <i class="fab fa-microsoft text-blue-500 text-xl mb-1"></i>
+                                    <p class="font-medium text-sm">Edge TTS</p>
+                                    <p class="text-xs text-green-600 font-medium">⭐ Recomendado</p>
+                                </div>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="tts-engine" value="gtts" class="hidden peer">
+                                <div class="p-3 border-2 rounded-xl text-center transition peer-checked:border-indigo-600 peer-checked:bg-indigo-50">
+                                    <i class="fab fa-google text-red-500 text-xl mb-1"></i>
+                                    <p class="font-medium text-sm">Google TTS</p>
+                                    <p class="text-xs text-gray-500">Básico</p>
+                                </div>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="tts-engine" value="pyttsx3" class="hidden peer">
+                                <div class="p-3 border-2 rounded-xl text-center transition peer-checked:border-indigo-600 peer-checked:bg-indigo-50">
+                                    <i class="fab fa-windows text-blue-500 text-xl mb-1"></i>
+                                    <p class="font-medium text-sm">Windows TTS</p>
+                                    <p class="text-xs text-gray-500">Offline</p>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Config Edge TTS -->
+                    <div id="edge-config" class="space-y-3 mb-4">
+                        <div class="bg-blue-50 rounded-xl p-4">
+                            <p class="text-sm text-blue-800">
+                                <i class="fas fa-info-circle mr-1"></i>
+                                <strong>Microsoft Edge TTS</strong> - Voces neuronales gratuitas de alta calidad. 
+                                Requiere conexión a internet.
+                            </p>
+                        </div>
+                        
+                        <!-- Selector de voz Edge -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Voz
+                                <span class="text-xs text-gray-500 font-normal">- 40+ opciones en español</span>
+                            </label>
+                            <select id="edge-voice-select" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                                <optgroup label="⭐ Español (España) - Recomendadas">
+                                    <option value="es-es-elvira" selected>Elvira - Femenina, cálida ⭐</option>
+                                    <option value="es-es-alvaro">Álvaro - Masculina, clara</option>
+                                    <option value="es-es-irene">Irene - Femenina, suave</option>
+                                    <option value="es-es-saul">Saúl - Masculina, profesional</option>
+                                    <option value="es-es-triana">Triana - Femenina, expresiva</option>
+                                    <option value="es-es-dario">Darío - Masculina, joven</option>
+                                    <option value="es-es-estrella">Estrella - Femenina, animada</option>
+                                    <option value="es-es-vera">Vera - Femenina, serena</option>
+                                </optgroup>
+                                <optgroup label="⭐ Español (México) - Recomendadas">
+                                    <option value="es-mx-dalia">Dalia - Femenina, cálida</option>
+                                    <option value="es-mx-jorge">Jorge - Masculina, clara</option>
+                                    <option value="es-mx-renata">Renata - Femenina, suave</option>
+                                    <option value="es-mx-gerardo">Gerardo - Masculina, profesional</option>
+                                    <option value="es-mx-beatriz">Beatriz - Femenina, amable</option>
+                                    <option value="es-mx-yago">Yago - Masculina, joven</option>
+                                </optgroup>
+                                <optgroup label="Español (Latinoamérica)">
+                                    <option value="es-ar-elena">Elena - Argentina, Femenina</option>
+                                    <option value="es-ar-tomas">Tomás - Argentina, Masculina</option>
+                                    <option value="es-co-salome">Salomé - Colombia, Femenina</option>
+                                    <option value="es-co-gonzalo">Gonzalo - Colombia, Masculina</option>
+                                    <option value="es-cl-catalina">Catalina - Chile, Femenina</option>
+                                    <option value="es-cl-lorenzo">Lorenzo - Chile, Masculina</option>
+                                </optgroup>
+                                <optgroup label="Inglés">
+                                    <option value="en-us-jenny">Jenny - US, Femenina</option>
+                                    <option value="en-us-guy">Guy - US, Masculina</option>
+                                    <option value="en-us-aria">Aria - US, Femenina</option>
+                                    <option value="en-gb-sonia">Sonia - UK, Femenina</option>
+                                    <option value="en-gb-ryan">Ryan - UK, Masculina</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Config gTTS -->
+                    <div id="gtts-config" class="hidden space-y-3 mb-4">
+                        <div class="bg-orange-50 rounded-xl p-4">
+                            <p class="text-sm text-orange-800">
+                                <i class="fas fa-exclamation-triangle mr-1"></i>
+                                <strong>Google TTS</strong> - Calidad básica, puede sonar robótico.
+                            </p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Idioma</label>
+                            <select id="language-select" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+                                <option value="es">Español</option>
+                                <option value="en">English</option>
+                                <option value="pt">Português</option>
+                                <option value="fr">Français</option>
+                                <option value="de">Deutsch</option>
+                                <option value="it">Italiano</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Config pyttsx3 -->
+                    <div id="pyttsx3-config" class="hidden space-y-3 p-4 bg-gray-50 rounded-xl">
+                        <div class="flex items-start space-x-2">
+                            <i class="fas fa-wifi-slash text-gray-500 mt-0.5"></i>
+                            <div class="text-sm text-gray-700">
+                                <p class="font-medium mb-1">Modo Offline</p>
+                                <p>Usa las voces instaladas en Windows. No requiere internet.</p>
+                                <p class="mt-1 text-xs text-gray-500">Para mejores voces, instala paquetes de voz española en Configuración > Hora e idioma.</p>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Idioma</label>
+                            <select id="pyttsx3-language-select" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                                <option value="es">Español</option>
+                                <option value="en">English</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Velocidad -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            Velocidad: <span id="speed-value">1.0x</span>
+                        </label>
+                        <input type="range" id="speed-slider" min="0.5" max="1.5" step="0.1" value="1.0"
+                            class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                        <div class="flex justify-between text-xs text-gray-500 mt-1">
+                            <span>Lento</span>
+                            <span>Normal</span>
+                            <span>Rápido</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel Derecho: Preview y Resultado -->
+            <div class="space-y-6">
+                <!-- Preview del texto -->
+                <div class="glass-effect rounded-2xl shadow-lg p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-semibold text-gray-800 flex items-center">
+                            <i class="fas fa-eye mr-2 text-indigo-600"></i>Vista Previa del Texto
+                        </h3>
+                        <button id="btn-edit-text" class="text-sm text-indigo-600 hover:text-indigo-800 hidden">
+                            <i class="fas fa-edit mr-1"></i>Editar
+                        </button>
+                    </div>
+                    <div id="text-preview" class="bg-gray-50 rounded-xl p-4 h-64 overflow-y-auto text-gray-600 text-sm leading-relaxed">
+                        <p class="text-gray-400 text-center mt-20">
+                            <i class="fas fa-file-import text-3xl mb-2"></i><br>
+                            Sube un archivo o pega texto para ver la vista previa
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Botón de conversión -->
+                <button id="btn-convert" disabled
+                    class="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none">
+                    <i class="fas fa-play mr-2"></i>Convertir a Audio
+                </button>
+
+                <!-- Resultado -->
+                <div id="result-panel" class="hidden glass-effect rounded-2xl shadow-lg p-6 fade-in">
+                    <h3 class="font-semibold text-gray-800 mb-4 flex items-center">
+                        <i class="fas fa-music mr-2 text-green-600"></i>Audio Generado
+                    </h3>
+                    
+                    <audio id="audio-player" controls class="w-full mb-4"></audio>
+                    
+                    <div class="flex space-x-3">
+                        <a id="download-link" href="#" download
+                            class="flex-1 py-3 bg-green-600 text-white text-center rounded-xl font-medium hover:bg-green-700 transition">
+                            <i class="fas fa-download mr-2"></i>Descargar MP3
+                        </a>
+                        <button id="btn-new-conversion" class="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition">
+                            <i class="fas fa-redo mr-2"></i>Nueva Conversión
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Loading -->
+                <div id="loading-panel" class="hidden glass-effect rounded-2xl shadow-lg p-10 text-center">
+                    <div class="spinner w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full mx-auto mb-4"></div>
+                    <p class="text-gray-600 font-medium">Generando audio...</p>
+                    <p class="text-sm text-gray-400 mt-2">Esto puede tardar unos segundos</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Info cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
+            <div class="bg-white rounded-xl p-6 shadow-md">
+                <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-4">
+                    <i class="fas fa-file-alt text-blue-600 text-xl"></i>
+                </div>
+                <h4 class="font-semibold text-gray-800 mb-2">Soporta Múltiples Formatos</h4>
+                <p class="text-gray-600 text-sm">PDF, Word (DOC/DOCX) y archivos de texto plano.</p>
+            </div>
+            <div class="bg-white rounded-xl p-6 shadow-md">
+                <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mb-4">
+                    <i class="fas fa-magic text-green-600 text-xl"></i>
+                </div>
+                <h4 class="font-semibold text-gray-800 mb-2">Voces Neuronales Gratis</h4>
+                <p class="text-gray-600 text-sm"><strong>Edge TTS</strong> usa inteligencia artificial de Microsoft. Completamente gratuito.</p>
+            </div>
+            <div class="bg-white rounded-xl p-6 shadow-md">
+                <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-4">
+                    <i class="fas fa-globe text-purple-600 text-xl"></i>
+                </div>
+                <h4 class="font-semibold text-gray-800 mb-2">40+ Voces en Español</h4>
+                <p class="text-gray-600 text-sm">Voces de España, México, Argentina, Colombia y Chile.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white py-8 mt-12">
+        <div class="container mx-auto px-4 text-center">
+            <p class="text-gray-400">Text2Audio Study - Convierte tus documentos a audio para estudiar mejor</p>
+            <p class="text-gray-500 text-sm mt-2">100% Gratuito - Sin API keys necesarias</p>
+        </div>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>
