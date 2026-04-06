@@ -144,36 +144,41 @@ class TTSService:
         """Genera audio usando Microsoft Edge TTS (gratuito)."""
         try:
             import edge_tts
-            import asyncio
-            
+
             # Seleccionar voz por defecto si no se especifica
             if not voice or voice not in cls.EDGE_VOICES:
                 voice = "es-es-elvira"  # Voz por defecto en español
-            
+
             voice_id = cls.EDGE_VOICES[voice][0]
-            
+
             # Ajustar velocidad (Edge TTS usa porcentaje: -100% a +100%)
             # speed 1.0 = 0%, 0.5 = -50%, 2.0 = +100%
             rate_percent = int((speed - 1.0) * 100)
             rate_str = f"{rate_percent:+d}%"
-            
+
             # Crear comunicador
             communicate = edge_tts.Communicate(text, voice_id, rate=rate_str)
-            
+
             # Usar un buffer en memoria
             mp3_buffer = io.BytesIO()
-            
-            # Ejecutar async
-            async def save_audio():
-                async for chunk in communicate.stream():
-                    if chunk["type"] == "audio":
-                        mp3_buffer.write(chunk["data"])
-            
-            asyncio.run(save_audio())
-            
+
+            # Ejecutar async usando asyncio.new_event_loop() para evitar conflictos
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            try:
+                async def save_audio():
+                    async for chunk in communicate.stream():
+                        if chunk["type"] == "audio":
+                            mp3_buffer.write(chunk["data"])
+
+                loop.run_until_complete(save_audio())
+            finally:
+                loop.close()
+
             mp3_buffer.seek(0)
             return mp3_buffer.read()
-            
+
         except ImportError:
             raise TTSError("edge-tts no está instalado. Ejecuta: pip install edge-tts")
         except Exception as e:
@@ -205,29 +210,31 @@ class TTSService:
         """Genera audio usando pyttsx3 (SAPI5 en Windows - offline)."""
         try:
             import pyttsx3
-            import tempfile
-            
+
             # Crear archivo temporal
             with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
                 temp_path = tmp.name
-            
+
             try:
-                # Inicializar motor
-                engine = pyttsx3.init()
-                
+                # Inicializar motor con driver específico para Windows
+                try:
+                    engine = pyttsx3.init('sapi5')  # Usar SAPI5 explícitamente en Windows
+                except Exception as e:
+                    # Si falla SAPI5, intentar con el motor por defecto
+                    engine = pyttsx3.init()
+
                 # Ajustar velocidad (palabras por minuto, default ~200)
                 base_rate = 200
                 engine.setProperty('rate', int(base_rate * speed))
-                
+
                 # Guardar a archivo
                 engine.save_to_file(text, temp_path)
                 engine.runAndWait()
-                engine.stop()
-                
+
                 # Leer archivo
                 with open(temp_path, 'rb') as f:
                     wav_data = f.read()
-                
+
                 # Convertir WAV a MP3
                 try:
                     from pydub import AudioSegment
@@ -237,15 +244,21 @@ class TTSService:
                     mp3_buffer.seek(0)
                     return mp3_buffer.read()
                 except ImportError:
+                    # Si pydub no está disponible, devolver WAV
                     return wav_data
-                    
+
             finally:
                 # Limpiar
                 if os.path.exists(temp_path):
-                    os.unlink(temp_path)
-                    
+                    try:
+                        os.unlink(temp_path)
+                    except:
+                        pass
+
+        except ImportError:
+            raise TTSError("pyttsx3 no está instalado. Ejecuta: pip install pyttsx3")
         except Exception as e:
-            raise TTSError(f"Error en pyttsx3: {str(e)}")
+            raise TTSError(f"Error en pyttsx3: {str(e)}. En Windows, asegúrate de que tienes voces instaladas en Configuración → Hora e idioma → Voz.")
     
     @classmethod
     def get_available_voices(cls, engine: TTSEngine) -> dict:
