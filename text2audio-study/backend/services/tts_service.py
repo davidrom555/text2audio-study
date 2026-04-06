@@ -8,6 +8,7 @@ import tempfile
 import asyncio
 from typing import Optional, Literal
 from enum import Enum
+from concurrent.futures import ThreadPoolExecutor
 import requests
 from gtts import gTTS
 
@@ -156,28 +157,20 @@ class TTSService:
             rate_percent = int((speed - 1.0) * 100)
             rate_str = f"{rate_percent:+d}%"
 
-            # Crear comunicador
-            communicate = edge_tts.Communicate(text, voice_id, rate=rate_str)
+            # Función async para generar audio
+            async def _generate_audio():
+                communicate = edge_tts.Communicate(text, voice_id, rate=rate_str)
+                mp3_buffer = io.BytesIO()
+                async for chunk in communicate.stream():
+                    if chunk["type"] == "audio":
+                        mp3_buffer.write(chunk["data"])
+                mp3_buffer.seek(0)
+                return mp3_buffer.read()
 
-            # Usar un buffer en memoria
-            mp3_buffer = io.BytesIO()
-
-            # Ejecutar async usando asyncio.new_event_loop() para evitar conflictos
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-            try:
-                async def save_audio():
-                    async for chunk in communicate.stream():
-                        if chunk["type"] == "audio":
-                            mp3_buffer.write(chunk["data"])
-
-                loop.run_until_complete(save_audio())
-            finally:
-                loop.close()
-
-            mp3_buffer.seek(0)
-            return mp3_buffer.read()
+            # Ejecutar en thread separado para evitar conflictos con FastAPI event loop
+            with ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, _generate_audio())
+                return future.result()
 
         except ImportError:
             raise TTSError("edge-tts no está instalado. Ejecuta: pip install edge-tts")
