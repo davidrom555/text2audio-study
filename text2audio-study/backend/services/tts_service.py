@@ -131,7 +131,13 @@ class TTSService:
             if engine == TTSEngine.EDGE:
                 return cls._edge_tts(text, voice, speed)
             elif engine == TTSEngine.PYTTSX3:
-                return cls._pyttsx3_tts(text, voice, language, speed)
+                try:
+                    return cls._pyttsx3_tts(text, voice, language, speed)
+                except TTSError as e:
+                    # En Render/Linux, pyttsx3 no funciona. Fallback a Edge TTS
+                    if "Error en pyttsx3" in str(e):
+                        return cls._edge_tts(text, voice, speed)
+                    raise
             else:
                 return cls._gtts_tts(text, language, speed)
         except TTSError:
